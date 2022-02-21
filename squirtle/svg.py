@@ -6,6 +6,7 @@ Example usage:
     my_svg.draw(100, 200, angle=15)
     
 """
+import math
 
 from pyglet.gl import *
 
@@ -15,18 +16,11 @@ try:
 except:
     import elementtree.ElementTree
     from elementtree.ElementTree import parse
-import math
 from ctypes import CFUNCTYPE, POINTER, cast, c_char_p
 import sys
 import string
 
-from gradient import *
-
-BEZIER_POINTS = 20
-CIRCLE_POINTS = 24
-TOLERANCE = 0.001
-
-xmlns = 'http://www.w3.org/2000/svg'
+from squirtle.gradient import *
 
 print(cast(glGetString(GL_SHADING_LANGUAGE_VERSION), c_char_p).value)
 
@@ -48,6 +42,30 @@ callback_types = {GLU_TESS_VERTEX: c_functype(None, POINTER(GLvoid)),
                   GLU_TESS_COMBINE: c_functype(None, POINTER(GLdouble), POINTER(POINTER(GLvoid)), POINTER(GLfloat), POINTER(POINTER(GLvoid)))}
 
 
+BEZIER_POINTS = 20
+CIRCLE_POINTS = 24
+TOLERANCE = 0.001
+
+xmlns = 'http://www.w3.org/2000/svg'
+
+
+def setup_gl():
+    """Set various pieces of OpenGL state for better rendering of SVG.
+
+    """
+    glEnable(GL_LINE_SMOOTH)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+
+class TesselateError(Exception):
+    pass
+
+
+def tesselate(loops):
+    return Tesselate().tesselate(loops)
+
+
 def set_tess_callback(which):
     def set_call(func):
         cb = callback_types[which](func)
@@ -55,13 +73,6 @@ def set_tess_callback(which):
         return cb
 
     return set_call
-
-
-def setup_gl():
-    """Set various pieces of OpenGL state for better rendering of SVG."""
-    glEnable(GL_LINE_SMOOTH)
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
 
 class SvgPath(object):
@@ -82,38 +93,33 @@ class SvgPath(object):
         )
 
 
-class TriangulationError(Exception):
-    """Exception raised when triangulation of a filled area fails. For internal use only."""
-    pass
-
-
 class SVG(object):
     """Opaque SVG image object.
-    
-    Users should instantiate this object once for each SVG file they wish to 
+
+    Users should instantiate this object once for each SVG file they wish to
     render.
-    
+
     """
 
     _disp_list_cache = {}
 
     def __init__(self, filename, anchor_x=0, anchor_y=0, bezier_points=BEZIER_POINTS, circle_points=CIRCLE_POINTS, invert_y=False):
         """Creates an SVG object from a .svg or .svgz file.
-        
+
             `filename`: str
                 The name of the file to be loaded.
             `anchor_x`: float
-                The horizontal anchor position for scaling and rotations. Defaults to 0. The symbolic 
+                The horizontal anchor position for scaling and rotations. Defaults to 0. The symbolic
                 values 'left', 'center' and 'right' are also accepted.
             `anchor_y`: float
-                The vertical anchor position for scaling and rotations. Defaults to 0. The symbolic 
+                The vertical anchor position for scaling and rotations. Defaults to 0. The symbolic
                 values 'bottom', 'center' and 'top' are also accepted.
             `bezier_points`: int
                 The number of line segments into which to subdivide Bezier splines. Defaults to 10.
             `circle_points`: int
-                The number of line segments into which to subdivide circular and elliptic arcs. 
+                The number of line segments into which to subdivide circular and elliptic arcs.
                 Defaults to 10.
-                
+
         """
         self.path_lookup = {}
         self.paths = []
@@ -178,21 +184,21 @@ class SVG(object):
 
     def draw(self, x, y, z=0, angle=0, scale=1):
         """Draws the SVG to screen.
-        
+
         :Parameters
             `x` : float
                 The x-coordinate at which to draw.
             `y` : float
                 The y-coordinate at which to draw.
             `z` : float
-                The z-coordinate at which to draw. Defaults to 0. Note that z-ordering may not 
+                The z-coordinate at which to draw. Defaults to 0. Note that z-ordering may not
                 give expected results when transparency is used.
             `angle` : float
                 The angle by which the image should be rotated (in degrees). Defaults to 0.
             `scale` : float
-                The amount by which the image should be scaled, either as a float, or a tuple 
+                The amount by which the image should be scaled, either as a float, or a tuple
                 of two floats (xscale, yscale).
-        
+
         """
         glPushMatrix()
         glTranslatef(x, y, z)
@@ -253,12 +259,14 @@ class SVG(object):
                         strokes = [stroke for x in loop_plus]
                     glPushMatrix()
                     glMultMatrixf(as_c_matrix(transform.to_mat4()))
+                    # glLineWidth(4)
                     glBegin(GL_LINES)
                     for vtx, clr in zip(loop_plus, strokes):
                         # vtx = transform(vtx)
                         glColor4ub(*clr)
                         glVertex3f(vtx[0], vtx[1], 0)
                     glEnd()
+                    # glLineWidth(1)
                     glPopMatrix()
 
     def parse_float(self, txt):
@@ -559,21 +567,40 @@ class SVG(object):
                         loop.append(pt)
                 path.append(loop)
             path_object = SvgPath(path if self.stroke else None, self.stroke,
-                                  self.triangulate(path) if self.fill else None, self.fill,
+                                  tesselate(path) if self.fill else None, self.fill,
                                   self.transform, self.path_id, self.path_title, self.path_description)
             self.paths.append(path_object)
             self.path_lookup[self.path_id] = path_object
         self.path = []
 
-    def triangulate(self, looplist):
-        tlist = []
+
+class Tesselate(object):
+    def fan_to_triangles(self):
+        c = self.curr_shape.pop(0)
+        p1 = self.curr_shape.pop(0)
+        while self.curr_shape:
+            p2 = self.curr_shape.pop(0)
+            self.tlist.extend([c, p1, p2])
+            p1 = p2
+
+    def strip_to_triangles(self):
+        p1 = self.curr_shape.pop(0)
+        p2 = self.curr_shape.pop(0)
+        while self.curr_shape:
+            p3 = self.curr_shape.pop(0)
+            self.tlist.extend([p1, p2, p3])
+            p1 = p2
+            p2 = p3
+
+    def tesselate(self, looplist):
+        self.tlist = []
         self.curr_shape = []
         spareverts = []
 
         @set_tess_callback(GLU_TESS_VERTEX)
         def vertexCallback(vertex):
             vertex = cast(vertex, POINTER(GLdouble))
-            self.curr_shape.append(list(vertex[0:2]))
+            self.curr_shape.append(tuple(vertex[0:2]))
 
         @set_tess_callback(GLU_TESS_BEGIN)
         def beginCallback(which):
@@ -582,24 +609,13 @@ class SVG(object):
         @set_tess_callback(GLU_TESS_END)
         def endCallback():
             if self.tess_style == GL_TRIANGLE_FAN:
-                c = self.curr_shape.pop(0)
-                p1 = self.curr_shape.pop(0)
-                while self.curr_shape:
-                    p2 = self.curr_shape.pop(0)
-                    tlist.extend([c, p1, p2])
-                    p1 = p2
+                self.fan_to_triangles()
             elif self.tess_style == GL_TRIANGLE_STRIP:
-                p1 = self.curr_shape.pop(0)
-                p2 = self.curr_shape.pop(0)
-                while self.curr_shape:
-                    p3 = self.curr_shape.pop(0)
-                    tlist.extend([p1, p2, p3])
-                    p1 = p2
-                    p2 = p3
+                self.strip_to_triangles()
             elif self.tess_style == GL_TRIANGLES:
-                tlist.extend(self.curr_shape)
+                self.tlist.extend(self.curr_shape)
             else:
-                self.warn("Unrecognised tesselation style: %d" % (self.tess_style,))
+                self.warn("Unknown tesselation style: %d" % (self.tess_style,))
             self.tess_style = None
             self.curr_shape = []
 
@@ -617,9 +633,14 @@ class SVG(object):
         def combineCallback(coords, vertex_data, weights, dataOut):
             x, y, z = coords[0:3]
             data = (GLdouble * 3)(x, y, z)
+            # dataOut[0] = cast(pointer(data), POINTER(GLvoid))
             dataOut[0] = cast(data, POINTER(GLvoid))
             spareverts.append(data)
 
+        data_lists = self.create_data_lists(looplist)
+        return self.perform_tessellation(data_lists)
+
+    def create_data_lists(self, looplist):
         data_lists = []
         for vlist in looplist:
             d_list = []
@@ -627,6 +648,9 @@ class SVG(object):
                 v_data = (GLdouble * 3)(x, y, 0)
                 d_list.append(v_data)
             data_lists.append(d_list)
+        return data_lists
+
+    def perform_tessellation(self, data_lists):
         gluTessBeginPolygon(tess, None)
         for d_list in data_lists:
             gluTessBeginContour(tess)
@@ -634,7 +658,7 @@ class SVG(object):
                 gluTessVertex(tess, v_data, v_data)
             gluTessEndContour(tess)
         gluTessEndPolygon(tess)
-        return tlist
+        return self.tlist
 
     def warn(self, message):
-        print(f"Warning: SVG Parser ({self.filename}) - {message}")
+        raise TesselateError(message)

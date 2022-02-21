@@ -1,4 +1,5 @@
 import ctypes
+import math
 
 from parse import *
 
@@ -15,6 +16,29 @@ class Matrix(object):
             elif string.startswith('scale('):
                 sx, sy = [float(x) for x in parse_list(string[6:-1])]
                 self.values = [sx, 0, 0, sy, 0, 0]
+            elif string.startswith('rotate('):
+                # Rotate an object some number of degrees around a specified axis
+                # With assistance from:
+                #   http://tutorials.jenkov.com/svg/svg-transformation.html
+                #   https://stackoverflow.com/a/15546967
+                # | a   c   translate_x |
+                # | b   d   translate_y |
+                # | 0   0   1           |
+                try:
+                    angle_deg, cx, cy = [float(x) for x in parse_list(string[7:-1])]
+                except ValueError:
+                    # Only degrees of rotation provided - rotate around 0, 0
+                    angle_deg = [float(x) for x in parse_list(string[7:-1])][0]
+                    cx = 0.0
+                    cy = 0.0
+                angle = math.radians(angle_deg)
+                translate_x = (-cx * math.cos(angle)) + (cy * math.sin(angle)) + cx
+                translate_y = (-cx * math.sin(angle)) - (cy * math.cos(angle)) + cy
+                a = math.cos(angle)
+                b = math.sin(angle)
+                c = -math.sin(angle)
+                d = math.cos(angle)
+                self.values = [a, b, c, d, translate_x, translate_y]
         elif string is not None:
             self.values = list(string)
 
