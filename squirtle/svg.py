@@ -6,7 +6,6 @@ Example usage:
     my_svg.draw(100, 200, angle=15)
     
 """
-import math
 
 from pyglet.gl import *
 
@@ -16,11 +15,18 @@ try:
 except:
     import elementtree.ElementTree
     from elementtree.ElementTree import parse
+import math
 from ctypes import CFUNCTYPE, POINTER, cast, c_char_p
 import sys
 import string
 
-from squirtle.gradient import *
+from gradient import *
+
+BEZIER_POINTS = 20
+CIRCLE_POINTS = 24
+TOLERANCE = 0.001
+
+xmlns = 'http://www.w3.org/2000/svg'
 
 print(cast(glGetString(GL_SHADING_LANGUAGE_VERSION), c_char_p).value)
 
@@ -42,30 +48,6 @@ callback_types = {GLU_TESS_VERTEX: c_functype(None, POINTER(GLvoid)),
                   GLU_TESS_COMBINE: c_functype(None, POINTER(GLdouble), POINTER(POINTER(GLvoid)), POINTER(GLfloat), POINTER(POINTER(GLvoid)))}
 
 
-BEZIER_POINTS = 20
-CIRCLE_POINTS = 24
-TOLERANCE = 0.001
-
-xmlns = 'http://www.w3.org/2000/svg'
-
-
-def setup_gl():
-    """Set various pieces of OpenGL state for better rendering of SVG.
-
-    """
-    glEnable(GL_LINE_SMOOTH)
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-
-
-class TesselateError(Exception):
-    pass
-
-
-def tesselate(loops):
-    return Tesselate().tesselate(loops)
-
-
 def set_tess_callback(which):
     def set_call(func):
         cb = callback_types[which](func)
@@ -73,6 +55,13 @@ def set_tess_callback(which):
         return cb
 
     return set_call
+
+
+def setup_gl():
+    """Set various pieces of OpenGL state for better rendering of SVG."""
+    glEnable(GL_LINE_SMOOTH)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
 
 class SvgPath(object):
@@ -91,6 +80,11 @@ class SvgPath(object):
         return "<SvgPath id=%s title='%s' description='%s' transform=%s>" % (
             self.id, self.title, self.description, self.transform
         )
+
+
+class TriangulationError(Exception):
+    """Exception raised when triangulation of a filled area fails. For internal use only."""
+    pass
 
 
 class SVG(object):
@@ -259,14 +253,12 @@ class SVG(object):
                         strokes = [stroke for x in loop_plus]
                     glPushMatrix()
                     glMultMatrixf(as_c_matrix(transform.to_mat4()))
-                    # glLineWidth(4)
                     glBegin(GL_LINES)
                     for vtx, clr in zip(loop_plus, strokes):
                         # vtx = transform(vtx)
                         glColor4ub(*clr)
                         glVertex3f(vtx[0], vtx[1], 0)
                     glEnd()
-                    # glLineWidth(1)
                     glPopMatrix()
 
     def parse_float(self, txt):
@@ -567,40 +559,21 @@ class SVG(object):
                         loop.append(pt)
                 path.append(loop)
             path_object = SvgPath(path if self.stroke else None, self.stroke,
-                                  tesselate(path) if self.fill else None, self.fill,
+                                  self.triangulate(path) if self.fill else None, self.fill,
                                   self.transform, self.path_id, self.path_title, self.path_description)
             self.paths.append(path_object)
             self.path_lookup[self.path_id] = path_object
         self.path = []
 
-
-class Tesselate(object):
-    def fan_to_triangles(self):
-        c = self.curr_shape.pop(0)
-        p1 = self.curr_shape.pop(0)
-        while self.curr_shape:
-            p2 = self.curr_shape.pop(0)
-            self.tlist.extend([c, p1, p2])
-            p1 = p2
-
-    def strip_to_triangles(self):
-        p1 = self.curr_shape.pop(0)
-        p2 = self.curr_shape.pop(0)
-        while self.curr_shape:
-            p3 = self.curr_shape.pop(0)
-            self.tlist.extend([p1, p2, p3])
-            p1 = p2
-            p2 = p3
-
-    def tesselate(self, looplist):
-        self.tlist = []
+    def triangulate(self, looplist):
+        tlist = []
         self.curr_shape = []
         spareverts = []
 
         @set_tess_callback(GLU_TESS_VERTEX)
         def vertexCallback(vertex):
             vertex = cast(vertex, POINTER(GLdouble))
-            self.curr_shape.append(tuple(vertex[0:2]))
+            self.curr_shape.append(list(vertex[0:2]))
 
         @set_tess_callback(GLU_TESS_BEGIN)
         def beginCallback(which):
@@ -609,13 +582,24 @@ class Tesselate(object):
         @set_tess_callback(GLU_TESS_END)
         def endCallback():
             if self.tess_style == GL_TRIANGLE_FAN:
-                self.fan_to_triangles()
+                c = self.curr_shape.pop(0)
+                p1 = self.curr_shape.pop(0)
+                while self.curr_shape:
+                    p2 = self.curr_shape.pop(0)
+                    tlist.extend([c, p1, p2])
+                    p1 = p2
             elif self.tess_style == GL_TRIANGLE_STRIP:
-                self.strip_to_triangles()
+                p1 = self.curr_shape.pop(0)
+                p2 = self.curr_shape.pop(0)
+                while self.curr_shape:
+                    p3 = self.curr_shape.pop(0)
+                    tlist.extend([p1, p2, p3])
+                    p1 = p2
+                    p2 = p3
             elif self.tess_style == GL_TRIANGLES:
-                self.tlist.extend(self.curr_shape)
+                tlist.extend(self.curr_shape)
             else:
-                self.warn("Unknown tesselation style: %d" % (self.tess_style,))
+                self.warn("Unrecognised tesselation style: %d" % (self.tess_style,))
             self.tess_style = None
             self.curr_shape = []
 
@@ -633,14 +617,9 @@ class Tesselate(object):
         def combineCallback(coords, vertex_data, weights, dataOut):
             x, y, z = coords[0:3]
             data = (GLdouble * 3)(x, y, z)
-            # dataOut[0] = cast(pointer(data), POINTER(GLvoid))
             dataOut[0] = cast(data, POINTER(GLvoid))
             spareverts.append(data)
 
-        data_lists = self.create_data_lists(looplist)
-        return self.perform_tessellation(data_lists)
-
-    def create_data_lists(self, looplist):
         data_lists = []
         for vlist in looplist:
             d_list = []
@@ -648,9 +627,6 @@ class Tesselate(object):
                 v_data = (GLdouble * 3)(x, y, 0)
                 d_list.append(v_data)
             data_lists.append(d_list)
-        return data_lists
-
-    def perform_tessellation(self, data_lists):
         gluTessBeginPolygon(tess, None)
         for d_list in data_lists:
             gluTessBeginContour(tess)
@@ -658,7 +634,7 @@ class Tesselate(object):
                 gluTessVertex(tess, v_data, v_data)
             gluTessEndContour(tess)
         gluTessEndPolygon(tess)
-        return self.tlist
+        return tlist
 
     def warn(self, message):
-        raise TesselateError(message)
+        print(f"Warning: SVG Parser ({self.filename}) - {message}")
