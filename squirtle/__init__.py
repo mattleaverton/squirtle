@@ -1,3 +1,3 @@
 __all__ = ['svg', 'matrix']
 
-from svg import *
+from squirtle.svg import *

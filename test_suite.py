@@ -2,7 +2,7 @@
 import os
 
 import pyglet
-from pyglet.gl import *
+from pyglet import gl
 
 import squirtle
 
@@ -13,10 +13,10 @@ w = pyglet.window.Window(config=config, resizable=True)
 keys = pyglet.window.key.KeyStateHandler()
 w.push_handlers(keys)
 
-glClearColor(1, 1, 1, 1)
-glEnable(GL_LINE_SMOOTH)
-glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
-glLineWidth(2)
+gl.glClearColor(1, 1, 1, 1)
+gl.glEnable(gl.GL_LINE_SMOOTH)
+gl.glHint(gl.GL_LINE_SMOOTH_HINT, gl.GL_NICEST)
+gl.glLineWidth(2)
 
 squirtle.setup_gl()
 
@@ -81,10 +81,10 @@ pyglet.clock.schedule_interval(tick, 1 / 60.0)
 @w.event
 def on_draw():
     w.clear()
-    glMatrixMode(GL_PROJECTION)
-    glLoadIdentity()
-    gluOrtho2D(0.0, 800.0, 600, 0)
-    glMatrixMode(GL_MODELVIEW)
+    gl.glMatrixMode(gl.GL_PROJECTION)
+    gl.glLoadIdentity()
+    gl.gluOrtho2D(0.0, 800.0, 600, 0)
+    gl.glMatrixMode(gl.GL_MODELVIEW)
     svgObj.draw(draw_x, draw_y, scale=zoom, angle=angle)
     # Necessary flush to ensure each SVG is displayed
     #   https://stackoverflow.com/a/64283380

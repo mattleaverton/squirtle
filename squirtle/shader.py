@@ -1,6 +1,6 @@
 import ctypes
 
-from pyglet.gl import *
+from pyglet import gl
 
 activeShader = None
 
@@ -9,7 +9,7 @@ class Shader(object):
     """An OpenGL shader object"""
 
     def __init__(self, shader_type, name="(unnamed shader)"):
-        self.shaderObject = glCreateShaderObjectARB(shader_type)
+        self.shaderObject = gl.glCreateShaderObjectARB(shader_type)
         self.name = name
         self.program = None
 
@@ -23,7 +23,7 @@ class Shader(object):
             self.program = None
 
         try:
-            glDeleteShader(self.shaderObject)
+            gl.glDeleteShader(self.shaderObject)
         except ImportError:
             # Python loudly "ignores" this error on shutdown - explicitly ignore here
             pass
@@ -32,13 +32,13 @@ class Shader(object):
         c = ctypes
         buff = c.create_string_buffer(source_string)
         c_text = c.cast(c.pointer(c.pointer(buff)),
-                        c.POINTER(c.POINTER(GLchar)))
-        glShaderSourceARB(self.shaderObject, 1, c_text, None)
+                        c.POINTER(c.POINTER(gl.GLchar)))
+        gl.glShaderSourceARB(self.shaderObject, 1, c_text, None)
 
     def compileShader(self):
-        glCompileShader(self.shaderObject)
+        gl.glCompileShader(self.shaderObject)
         rval = ctypes.c_long()
-        glGetObjectParameterivARB(self.shaderObject, GL_OBJECT_COMPILE_STATUS_ARB, ctypes.pointer(rval))
+        gl.glGetObjectParameterivARB(self.shaderObject, gl.GL_OBJECT_COMPILE_STATUS_ARB, ctypes.pointer(rval))
         if rval:
             print(f"{self.name} compiled successfuly.")
         else:
@@ -48,13 +48,13 @@ class Shader(object):
     def infoLog(self):
         c = ctypes
         infoLogLength = c.c_long()
-        glGetObjectParameterivARB(self.shaderObject,
-                                  GL_OBJECT_INFO_LOG_LENGTH_ARB,
-                                  ctypes.pointer(infoLogLength))
+        gl.glGetObjectParameterivARB(self.shaderObject,
+                                     gl.GL_OBJECT_INFO_LOG_LENGTH_ARB,
+                                     ctypes.pointer(infoLogLength))
         buffer = c.create_string_buffer(infoLogLength.value)
         c_text = c.cast(c.pointer(buffer),
-                        c.POINTER(GLchar))
-        glGetInfoLogARB(self.shaderObject, infoLogLength.value, None, c_text)
+                        c.POINTER(gl.GLchar))
+        gl.glGetInfoLogARB(self.shaderObject, infoLogLength.value, None, c_text)
         return c.string_at(c_text)
 
     def printInfoLog(self):
@@ -75,13 +75,13 @@ class Program(object):
     """An OpenGL shader program"""
 
     def __init__(self):
-        self.programObject = glCreateProgramObjectARB()
+        self.programObject = gl.glCreateProgramObjectARB()
         self.shaders = []
         self.uniformVars = {}
 
     def __del__(self):
         try:
-            glDeleteObjectARB(self.programObject)
+            gl.glDeleteObjectARB(self.programObject)
         except ImportError:
             # Python loudly "ignores" this error on shutdown - explicitly ignore here
             pass
@@ -89,36 +89,36 @@ class Program(object):
     def attachShader(self, shader):
         self.shaders.append(shader)
         shader.program = self
-        glAttachObjectARB(self.programObject, shader.shaderObject)
+        gl.glAttachObjectARB(self.programObject, shader.shaderObject)
 
     def detachShader(self, shader):
         self.shaders.remove(shader)
-        glDetachObjectARB(self.programObject, shader.shaderObject)
+        gl.glDetachObjectARB(self.programObject, shader.shaderObject)
         print("Shader detached")
 
     def link(self):
-        glLinkProgramARB(self.programObject)
+        gl.glLinkProgramARB(self.programObject)
 
     def use(self):
         global activeShader
         activeShader = self
-        glUseProgramObjectARB(self.programObject)
+        gl.glUseProgramObjectARB(self.programObject)
         self.setVars()
 
     def stop(self):
         global activeShader
-        glUseProgramObjectARB(0)
+        gl.glUseProgramObjectARB(0)
         activeShader = None
 
     def uniformi(self, name, *args):
-        argf = {1: glUniform1iARB,
-                2: glUniform2iARB,
-                3: glUniform3iARB,
-                4: glUniform4iARB}
+        argf = {1: gl.glUniform1iARB,
+                2: gl.glUniform2iARB,
+                3: gl.glUniform3iARB,
+                4: gl.glUniform4iARB}
         f = argf[len(args)]
 
         def _set_uniform(name, *args):
-            location = glGetUniformLocationARB(self.programObject, name)
+            location = gl.glGetUniformLocationARB(self.programObject, name)
             f(location, *args)
 
         self.uniformVars[name] = UniformVar(_set_uniform, name, *args)
@@ -126,14 +126,14 @@ class Program(object):
             self.uniformVars[name].set()
 
     def uniformf(self, name, *args):
-        argf = {1: glUniform1fARB,
-                2: glUniform2fARB,
-                3: glUniform3fARB,
-                4: glUniform4fARB}
+        argf = {1: gl.glUniform1fARB,
+                2: gl.glUniform2fARB,
+                3: gl.glUniform3fARB,
+                4: gl.glUniform4fARB}
         f = argf[len(args)]
 
         def _set_uniform(name, *args):
-            location = glGetUniformLocationARB(self.programObject, name)
+            location = gl.glGetUniformLocationARB(self.programObject, name)
             f(location, *args)
 
         self.uniformVars[name] = UniformVar(_set_uniform, name, *args)
@@ -141,13 +141,13 @@ class Program(object):
             self.uniformVars[name].set()
 
     def uniformMatrixf(self, name, transpose, values):
-        argf = {4: glUniformMatrix2fvARB,
-                9: glUniformMatrix3fvARB,
-                16: glUniformMatrix4fvARB}
+        argf = {4: gl.glUniformMatrix2fvARB,
+                9: gl.glUniformMatrix3fvARB,
+                16: gl.glUniformMatrix4fvARB}
         f = argf[len(values)]
 
         def _set_uniform(name, values):
-            location = glGetUniformLocationARB(self.programObject, name)
+            location = gl.glGetUniformLocationARB(self.programObject, name)
             matrix_type = ctypes.c_float * len(values)
             matrix = matrix_type(*values)
             f(location, 1, transpose, ctypes.cast(matrix, ctypes.POINTER(ctypes.c_float)))
@@ -161,15 +161,15 @@ class Program(object):
             var.set()
 
     def printInfoLog(self):
-        print(glGetInfoLogARB(self.programObject))
+        print(gl.glGetInfoLogARB(self.programObject))
 
 
 def MakePixelShaderFromSource(src):
-    return MakeShaderFromSource(src, GL_FRAGMENT_SHADER_ARB)
+    return MakeShaderFromSource(src, gl.GL_FRAGMENT_SHADER_ARB)
 
 
 def MakeVertexShaderFromSource(src):
-    return MakeShaderFromSource(src, GL_VERTEX_SHADER_ARB)
+    return MakeShaderFromSource(src, gl.GL_VERTEX_SHADER_ARB)
 
 
 def MakeShaderFromSource(src, shader_type):
@@ -203,5 +203,5 @@ def MakeProgramFromSource(vertex_shader_src, pixel_shader_src):
 
 def DisableShaders():
     global activeShader
-    glUseProgramObjectARB(0)
+    gl.glUseProgramObjectARB(0)
     activeShader = None

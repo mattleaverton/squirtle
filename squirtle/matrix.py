@@ -1,7 +1,7 @@
 import ctypes
 import math
 
-from parse import *
+from squirtle.parse import parse_list
 
 
 class Matrix(object):

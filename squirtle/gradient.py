@@ -1,6 +1,7 @@
 from squirtle import shader
 from squirtle import shaders
-from squirtle.matrix import *
+from squirtle.matrix import Matrix, svg_matrix_to_gl_matrix
+from squirtle.parse import parse_color, parse_style
 
 vertex_shader_src = shaders.vertex
 radial_shader_src = shaders.radial

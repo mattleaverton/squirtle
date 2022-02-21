@@ -7,7 +7,7 @@ Example usage:
     
 """
 
-from pyglet.gl import *
+from pyglet import gl
 
 try:
     import xml.etree.ElementTree
@@ -17,10 +17,13 @@ except:
     from elementtree.ElementTree import parse
 import math
 from ctypes import CFUNCTYPE, POINTER, cast, c_char_p
+import re
 import sys
 import string
 
-from gradient import *
+from squirtle.gradient import GradientContainer, LinearGradient, RadialGradient
+from squirtle.matrix import Matrix, as_c_matrix
+from squirtle.parse import parse_color, parse_list, parse_style
 
 BEZIER_POINTS = 20
 CIRCLE_POINTS = 24
@@ -28,11 +31,11 @@ TOLERANCE = 0.001
 
 xmlns = 'http://www.w3.org/2000/svg'
 
-print(cast(glGetString(GL_SHADING_LANGUAGE_VERSION), c_char_p).value)
+print(cast(gl.glGetString(gl.GL_SHADING_LANGUAGE_VERSION), c_char_p).value)
 
-tess = gluNewTess()
-gluTessNormal(tess, 0, 0, 1)
-gluTessProperty(tess, GLU_TESS_WINDING_RULE, GLU_TESS_WINDING_NONZERO)
+tess = gl.gluNewTess()
+gl.gluTessNormal(tess, 0, 0, 1)
+gl.gluTessProperty(tess, gl.GLU_TESS_WINDING_RULE, gl.GLU_TESS_WINDING_NONZERO)
 
 if sys.platform == 'win32':
     from ctypes import WINFUNCTYPE
@@ -41,17 +44,17 @@ if sys.platform == 'win32':
 else:
     c_functype = CFUNCTYPE
 
-callback_types = {GLU_TESS_VERTEX: c_functype(None, POINTER(GLvoid)),
-                  GLU_TESS_BEGIN: c_functype(None, GLenum),
-                  GLU_TESS_END: c_functype(None),
-                  GLU_TESS_ERROR: c_functype(None, GLenum),
-                  GLU_TESS_COMBINE: c_functype(None, POINTER(GLdouble), POINTER(POINTER(GLvoid)), POINTER(GLfloat), POINTER(POINTER(GLvoid)))}
+callback_types = {gl.GLU_TESS_VERTEX: c_functype(None, POINTER(gl.GLvoid)),
+                  gl.GLU_TESS_BEGIN: c_functype(None, gl.GLenum),
+                  gl.GLU_TESS_END: c_functype(None),
+                  gl.GLU_TESS_ERROR: c_functype(None, gl.GLenum),
+                  gl.GLU_TESS_COMBINE: c_functype(None, POINTER(gl.GLdouble), POINTER(POINTER(gl.GLvoid)), POINTER(gl.GLfloat), POINTER(POINTER(gl.GLvoid)))}
 
 
 def set_tess_callback(which):
     def set_call(func):
         cb = callback_types[which](func)
-        gluTessCallback(tess, which, cast(cb, CFUNCTYPE(None)))
+        gl.gluTessCallback(tess, which, cast(cb, CFUNCTYPE(None)))
         return cb
 
     return set_call
@@ -59,9 +62,9 @@ def set_tess_callback(which):
 
 def setup_gl():
     """Set various pieces of OpenGL state for better rendering of SVG."""
-    glEnable(GL_LINE_SMOOTH)
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    gl.glEnable(gl.GL_LINE_SMOOTH)
+    gl.glEnable(gl.GL_BLEND)
+    gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
 
 
 class SvgPath(object):
@@ -170,10 +173,10 @@ class SVG(object):
                 f = open(self.filename, 'rb')
             self.tree = parse(f)
             self.parse_doc()
-            self.disp_list = glGenLists(1)
-            glNewList(self.disp_list, GL_COMPILE)
+            self.disp_list = gl.glGenLists(1)
+            gl.glNewList(self.disp_list, gl.GL_COMPILE)
             self.render_slowly()
-            glEndList()
+            gl.glEndList()
             self._disp_list_cache[self.filename, self.bezier_points] = (self.disp_list, self.width, self.height)
 
     def draw(self, x, y, z=0, angle=0, scale=1):
@@ -194,19 +197,19 @@ class SVG(object):
                 of two floats (xscale, yscale).
 
         """
-        glPushMatrix()
-        glTranslatef(x, y, z)
+        gl.glPushMatrix()
+        gl.glTranslatef(x, y, z)
         if angle:
-            glRotatef(angle, 0, 0, 1)
+            gl.glRotatef(angle, 0, 0, 1)
         if scale != 1:
             try:
-                glScalef(scale[0], scale[1], 1)
+                gl.glScalef(scale[0], scale[1], 1)
             except TypeError:
-                glScalef(scale, scale, 1)
+                gl.glScalef(scale, scale, 1)
         if self._a_x or self._a_y:
-            glTranslatef(-self._a_x, -self._a_y, 0)
-        glCallList(self.disp_list)
-        glPopMatrix()
+            gl.glTranslatef(-self._a_x, -self._a_y, 0)
+        gl.glCallList(self.disp_list)
+        gl.glPopMatrix()
 
     def render_slowly(self):
         self.n_tris = 0
@@ -226,19 +229,19 @@ class SVG(object):
                 else:
                     fills = [fill for x in tris]
 
-                glPushMatrix()
-                glMultMatrixf(as_c_matrix(transform.to_mat4()))
+                gl.glPushMatrix()
+                gl.glMultMatrixf(as_c_matrix(transform.to_mat4()))
                 if g: g.apply_shader(transform)
-                glBegin(GL_TRIANGLES)
+                gl.glBegin(gl.GL_TRIANGLES)
                 for vtx, clr in zip(tris, fills):
                     # vtx = transform(vtx)
                     if not g:
-                        glColor4ub(*clr)
+                        gl.glColor4ub(*clr)
                     else:
-                        glColor4f(1, 1, 1, 1)
-                    glVertex3f(vtx[0], vtx[1], 0)
-                glEnd()
-                glPopMatrix()
+                        gl.glColor4f(1, 1, 1, 1)
+                    gl.glVertex3f(vtx[0], vtx[1], 0)
+                gl.glEnd()
+                gl.glPopMatrix()
                 if g: g.unapply_shader()
             if path:
                 for loop in path:
@@ -251,15 +254,15 @@ class SVG(object):
                         strokes = [g.interp(x) for x in loop_plus]
                     else:
                         strokes = [stroke for x in loop_plus]
-                    glPushMatrix()
-                    glMultMatrixf(as_c_matrix(transform.to_mat4()))
-                    glBegin(GL_LINES)
+                    gl.glPushMatrix()
+                    gl.glMultMatrixf(as_c_matrix(transform.to_mat4()))
+                    gl.glBegin(gl.GL_LINES)
                     for vtx, clr in zip(loop_plus, strokes):
                         # vtx = transform(vtx)
-                        glColor4ub(*clr)
-                        glVertex3f(vtx[0], vtx[1], 0)
-                    glEnd()
-                    glPopMatrix()
+                        gl.glColor4ub(*clr)
+                        gl.glVertex3f(vtx[0], vtx[1], 0)
+                    gl.glEnd()
+                    gl.glPopMatrix()
 
     def parse_float(self, txt):
         if txt.endswith('px'):
@@ -570,25 +573,25 @@ class SVG(object):
         self.curr_shape = []
         spareverts = []
 
-        @set_tess_callback(GLU_TESS_VERTEX)
+        @set_tess_callback(gl.GLU_TESS_VERTEX)
         def vertexCallback(vertex):
-            vertex = cast(vertex, POINTER(GLdouble))
+            vertex = cast(vertex, POINTER(gl.GLdouble))
             self.curr_shape.append(list(vertex[0:2]))
 
-        @set_tess_callback(GLU_TESS_BEGIN)
+        @set_tess_callback(gl.GLU_TESS_BEGIN)
         def beginCallback(which):
             self.tess_style = which
 
-        @set_tess_callback(GLU_TESS_END)
+        @set_tess_callback(gl.GLU_TESS_END)
         def endCallback():
-            if self.tess_style == GL_TRIANGLE_FAN:
+            if self.tess_style == gl.GL_TRIANGLE_FAN:
                 c = self.curr_shape.pop(0)
                 p1 = self.curr_shape.pop(0)
                 while self.curr_shape:
                     p2 = self.curr_shape.pop(0)
                     tlist.extend([c, p1, p2])
                     p1 = p2
-            elif self.tess_style == GL_TRIANGLE_STRIP:
+            elif self.tess_style == gl.GL_TRIANGLE_STRIP:
                 p1 = self.curr_shape.pop(0)
                 p2 = self.curr_shape.pop(0)
                 while self.curr_shape:
@@ -596,16 +599,16 @@ class SVG(object):
                     tlist.extend([p1, p2, p3])
                     p1 = p2
                     p2 = p3
-            elif self.tess_style == GL_TRIANGLES:
+            elif self.tess_style == gl.GL_TRIANGLES:
                 tlist.extend(self.curr_shape)
             else:
                 self.warn("Unrecognised tesselation style: %d" % (self.tess_style,))
             self.tess_style = None
             self.curr_shape = []
 
-        @set_tess_callback(GLU_TESS_ERROR)
+        @set_tess_callback(gl.GLU_TESS_ERROR)
         def errorCallback(code):
-            ptr = gluErrorString(code)
+            ptr = gl.gluErrorString(code)
             err = ''
             idx = 0
             while ptr[idx]:
@@ -613,27 +616,27 @@ class SVG(object):
                 idx += 1
             self.warn("GLU Tesselation Error: " + err)
 
-        @set_tess_callback(GLU_TESS_COMBINE)
+        @set_tess_callback(gl.GLU_TESS_COMBINE)
         def combineCallback(coords, vertex_data, weights, dataOut):
             x, y, z = coords[0:3]
-            data = (GLdouble * 3)(x, y, z)
-            dataOut[0] = cast(data, POINTER(GLvoid))
+            data = (gl.GLdouble * 3)(x, y, z)
+            dataOut[0] = cast(data, POINTER(gl.GLvoid))
             spareverts.append(data)
 
         data_lists = []
         for vlist in looplist:
             d_list = []
             for x, y in vlist:
-                v_data = (GLdouble * 3)(x, y, 0)
+                v_data = (gl.GLdouble * 3)(x, y, 0)
                 d_list.append(v_data)
             data_lists.append(d_list)
-        gluTessBeginPolygon(tess, None)
+        gl.gluTessBeginPolygon(tess, None)
         for d_list in data_lists:
-            gluTessBeginContour(tess)
+            gl.gluTessBeginContour(tess)
             for v_data in d_list:
-                gluTessVertex(tess, v_data, v_data)
-            gluTessEndContour(tess)
-        gluTessEndPolygon(tess)
+                gl.gluTessVertex(tess, v_data, v_data)
+            gl.gluTessEndContour(tess)
+        gl.gluTessEndPolygon(tess)
         return tlist
 
     def warn(self, message):
