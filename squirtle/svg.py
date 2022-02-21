@@ -166,7 +166,7 @@ class SVG(object):
         if (self.filename, self.bezier_points) in self._disp_list_cache:
             self.disp_list, self.width, self.height = self._disp_list_cache[self.filename, self.bezier_points]
         else:
-            if open(self.filename, 'rb').read(3) == '\x1f\x8b\x08':  # gzip magic numbers
+            if open(self.filename, 'rb').read(3) == b'\x1f\x8b\x08':  # gzip magic numbers
                 import gzip
                 f = gzip.open(self.filename, 'rb')
             else:
