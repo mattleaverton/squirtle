@@ -1,19 +1,18 @@
-from parse import *
-from matrix import *
-import shader
-import shaders
+from squirtle import shader
+from squirtle import shaders
+from squirtle.matrix import *
 
 vertex_shader_src = shaders.vertex
 radial_shader_src = shaders.radial
 linear_shader_src = shaders.linear
 
-
-#create shader
+# create shader
 radial_shader = shader.MakeProgramFromSource(vertex_shader_src, radial_shader_src)
 radial_shader.stop()
 
 linear_shader = shader.MakeProgramFromSource(vertex_shader_src, linear_shader_src)
 linear_shader.stop()
+
 
 class GradientContainer(dict):
     def __init__(self, *args, **kwargs):
@@ -41,8 +40,8 @@ class GradientContainer(dict):
         callbacks = self.callback_dict.get(key, [])
         for callback in callbacks:
             callback(val)
-        
-    
+
+
 class Gradient(object):
     def __init__(self, element, svg):
         self.element = element
@@ -61,7 +60,6 @@ class Gradient(object):
         self.svg = svg
         self.grad_transform = Matrix(element.get('gradientTransform'))
         self.inv_transform = Matrix(element.get('gradientTransform')).inverse()
-        
 
         inherit = self.element.get('{http://www.w3.org/1999/xlink}href')
         parent = None
@@ -75,7 +73,7 @@ class Gradient(object):
                 return
         if not delay_params:
             self.get_params(parent)
-        
+
     def interp(self, pt):
         if not self.stops: return [255, 0, 255, 255]
         t = self.grad_value(self.inv_transform(pt))
@@ -86,7 +84,7 @@ class Gradient(object):
             if t <= top[0]:
                 u = bottom[0]
                 v = top[0]
-                alpha = (t - u)/(v - u)
+                alpha = (t - u) / (v - u)
                 return [int(x[0] * (1 - alpha) + x[1] * alpha) for x in zip(bottom[1], top[1])]
         return self.stops[-1][1]
 
@@ -103,23 +101,27 @@ class Gradient(object):
 
     def tardy_gradient_parsed(self, gradient):
         self.get_params(gradient)
-        
-    def apply_shader(self, transform): pass
-    
-    def unapply_shader(self, transform): pass
-        
+
+    def apply_shader(self, transform):
+        pass
+
+    def unapply_shader(self, transform):
+        pass
+
+
 class LinearGradient(Gradient):
     params = ['x1', 'x2', 'y1', 'y2', 'stops']
+
     def grad_value(self, pt):
-        return ((pt[0] - self.x1)*(self.x2 - self.x1) + (pt[1] - self.y1)*(self.y2 - self.y1)) / ((self.x1 - self.x2)**2 + (self.y1 - self.y2)**2)
-    
+        return ((pt[0] - self.x1) * (self.x2 - self.x1) + (pt[1] - self.y1) * (self.y2 - self.y1)) / ((self.x1 - self.x2) ** 2 + (self.y1 - self.y2) ** 2)
+
     def apply_shader(self, transform):
         if not self.stops: return
         linear_shader.use()
-        linear_shader.uniformf("start", self.x1, self.y1)
-        linear_shader.uniformf("end", self.x2, self.y2)
-        linear_shader.uniformMatrixf("worldTransform", False, svg_matrix_to_gl_matrix(transform))
-        linear_shader.uniformMatrixf("gradientTransform",
+        linear_shader.uniformf(b"start", self.x1, self.y1)
+        linear_shader.uniformf(b"end", self.x2, self.y2)
+        linear_shader.uniformMatrixf(b"worldTransform", False, svg_matrix_to_gl_matrix(transform))
+        linear_shader.uniformMatrixf(b"gradientTransform",
                                      False,
                                      svg_matrix_to_gl_matrix(self.grad_transform))
         stop_points = []
@@ -128,66 +130,68 @@ class LinearGradient(Gradient):
             stop_points.append(stop_point)
         while len(stop_points) < 5:
             stop_points.append(0.0)
-        
-        #can't support more than 5 of these bad boys..
+
+        # can't support more than 5 of these bad boys..
         if len(stop_points) > 5:
             stop_points = stop_points[:5]
-        
-        linear_shader.uniformf("stops", *(stop_points[1:]))
-        
+
+        linear_shader.uniformf(b"stops", *(stop_points[1:]))
+
         def get_stop(i):
             return self.stops[i] if i < len(self.stops) else (1.0, [0.0, 0.0, 0.0, 0.0])
-        
-        for i in xrange(len(stop_points)):
+
+        for i in range(len(stop_points)):
             stop_point, color = get_stop(i)
-            color = tuple(float(x)/255.0 for x in color)
-            linear_shader.uniformf("stop" + str(i), *color)
-    
+            color = tuple(float(x) / 255.0 for x in color)
+            linear_shader.uniformf(b"stop" + str(i).encode(), *color)
+
     def unapply_shader(self):
         if not self.stops: return
         linear_shader.stop()
+
 
 class RadialGradient(Gradient):
     params = ['cx', 'cy', 'r', 'stops']
 
     def grad_value(self, pt):
+        import math
+        return math.sqrt((pt[0] - self.cx) ** 2 + (pt[1] - self.cy) ** 2) / self.r
 
-        return math.sqrt((pt[0] - self.cx) ** 2 + (pt[1] - self.cy) ** 2)/self.r
-        
     def apply_shader(self, transform):
         if not self.stops: return
         radial_shader.use()
-        radial_shader.uniformf("radius", self.r)
-        radial_shader.uniformf("center", self.cx, self.cy)
-        radial_shader.uniformMatrixf("worldTransform", False, svg_matrix_to_gl_matrix(transform))
-        radial_shader.uniformMatrixf("gradientTransform",
+        radial_shader.uniformf(b"radius", self.r)
+        radial_shader.uniformf(b"center", self.cx, self.cy)
+        radial_shader.uniformMatrixf(b"worldTransform", False, svg_matrix_to_gl_matrix(transform))
+        radial_shader.uniformMatrixf(b"gradientTransform",
                                      False,
                                      svg_matrix_to_gl_matrix(self.grad_transform))
-        radial_shader.uniformMatrixf("invGradientTransform",
+        radial_shader.uniformMatrixf(b"invGradientTransform",
                                      False,
                                      svg_matrix_to_gl_matrix(self.inv_transform))
         stop_points = []
         for stop in self.stops:
             stop_point, color = stop
             stop_points.append(stop_point)
-        
+
         while len(stop_points) < 5:
             stop_points.append(0.0)
-        
-        #can't support more than 4 of these bad boys..
+
+        # can't support more than 4 of these bad boys..
         if len(stop_points) > 5:
             stop_points = stop_points[:5]
-        
-        radial_shader.uniformf("stops", *(stop_points[1:]))
-        
+
+        radial_shader.uniformf(b"stops", *(stop_points[1:]))
+
         def get_stop(i):
             return self.stops[i] if i < len(self.stops) else (1.0, [0.0, 0.0, 0.0, 0.0])
-        
-        for i in xrange(len(stop_points)):
+
+        for i in range(len(stop_points)):
             stop_point, color = get_stop(i)
-            color = tuple(float(x)/255.0 for x in color)
-            radial_shader.uniformf("stop" + str(i), *color)
-    
+            color = tuple(float(x) / 255.0 for x in color)
+            radial_shader.uniformf(b"stop" + str(i).encode(), *color)
+
     def unapply_shader(self):
-        if not self.stops: return
+        if not self.stops:
+            return
         radial_shader.stop()

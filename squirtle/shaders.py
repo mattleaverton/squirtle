@@ -1,4 +1,4 @@
-vertex = """
+vertex = b"""
 varying vec4 worldCoords;
 varying vec4 localCoords;
 uniform mat3 transform;
@@ -10,8 +10,7 @@ void main()
     gl_Position = ftransform();
 }"""
 
-
-radial = """
+radial = b"""
 
 uniform vec2 center;
 uniform float radius;
@@ -34,9 +33,9 @@ varying vec4 localCoords;
 void main()
 {
     vec4 result;
-    
+
     vec3 transformed = invGradientTransform*vec3(localCoords.x, localCoords.y, 1);
-    
+
     //what is this actually doing?
     vec3 realcenter = vec3(center.x, center.y, 1);
 
@@ -66,7 +65,7 @@ void main()
     gl_FragColor = result;
 }"""
 
-linear = """
+linear = b"""
 
 uniform vec2 start;
 uniform vec2 end;
@@ -90,11 +89,11 @@ varying vec4 localCoords;
 void main()
 {
     vec4 result;
-            
+
     vec3 s = gradientTransform*vec3(start.x, start.y, 1);
     vec3 d = gradientTransform*vec3(end.x, end.y, 1); 
     vec3 l = localCoords.xyz;
-        
+
     float num = (l.x - s.x)*(d.x - s.x) + (l.y - s.y)*(d.y - s.y);
     float denom = pow(abs(s.x - d.x), 2.0) + pow(abs(s.y - d.y), 2.0);
     float intensity =  clamp(num / denom, 0.0, 1.0);
@@ -120,7 +119,7 @@ void main()
     {
         result.rgba = stop4;
     }
-    
+
     gl_FragColor = result;
 }
 """
