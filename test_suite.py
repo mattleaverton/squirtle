@@ -1,21 +1,21 @@
 #! usr/bin/env python 
 import os
-import sys
+
 import pyglet
 from pyglet.gl import *
+
 import squirtle
 
 config = pyglet.gl.Config(sample_buffers=1, samples=4)
 w = pyglet.window.Window(config=config, resizable=True)
 
-
-#w = pyglet.window.Window(800, 600)
+# w = pyglet.window.Window(800, 600)
 keys = pyglet.window.key.KeyStateHandler()
 w.push_handlers(keys)
 
-glClearColor(1,1,1,1)
+glClearColor(1, 1, 1, 1)
 glEnable(GL_LINE_SMOOTH)
-glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
 glLineWidth(2)
 
 squirtle.setup_gl()
@@ -25,18 +25,20 @@ filelist = [f for f in os.listdir('svgs')
 filename = None
 svgObj = None
 
+
 def nextFile():
     global filename, svgObj
     if not filename:
         next = 0
     else:
         prevFile = os.path.basename(filename)
-        next = filelist.index(prevFile)+1
+        next = filelist.index(prevFile) + 1
         next %= len(filelist)
     filename = os.path.join('svgs', filelist[next])
-    print 'Parsing', filename
+    print(f'Parsing {filename}')
     svgObj = squirtle.SVG(filename)
-    svgObj.anchor_x, svgObj.anchor_y = svgObj.width/2, svgObj.height/2
+    svgObj.anchor_x, svgObj.anchor_y = svgObj.width / 2, svgObj.height / 2
+
 
 nextFile()
 
@@ -44,6 +46,7 @@ zoom = 1
 angle = 0
 draw_x = 400
 draw_y = 300
+
 
 def tick(dt):
     global zoom, angle, draw_x, draw_y
@@ -63,13 +66,17 @@ def tick(dt):
         angle -= 8
     elif keys[pyglet.window.key.RIGHT]:
         angle += 8
-        
+
+
 def on_key_press(symbol, modifiers):
     if symbol == pyglet.window.key.SPACE:
         nextFile()
+
+
 w.push_handlers(on_key_press)
 
-pyglet.clock.schedule_interval(tick, 1/60.0)
+pyglet.clock.schedule_interval(tick, 1 / 60.0)
+
 
 @w.event
 def on_draw():
@@ -79,5 +86,9 @@ def on_draw():
     gluOrtho2D(0.0, 800.0, 600, 0)
     glMatrixMode(GL_MODELVIEW)
     svgObj.draw(draw_x, draw_y, scale=zoom, angle=angle)
-    
+    # Necessary flush to ensure each SVG is displayed
+    #   https://stackoverflow.com/a/64283380
+    pyglet.gl.glFlush()
+
+
 pyglet.app.run()
