@@ -406,13 +406,55 @@ class SVG(object):
             y = float(e.get('y'))
             h = float(e.get('height'))
             w = float(e.get('width'))
-            self.new_path()
-            self.set_position(x, y)
-            self.line_to(x + w, y)
-            self.line_to(x + w, y + h)
-            self.line_to(x, y + h)
-            self.line_to(x, y)
-            self.end_path()
+            rx = e.get('rx', None)
+            ry = e.get('ry', None)
+            if rx is None and ry is None:
+                self.new_path()
+                self.set_position(x, y)
+                self.line_to(x + w, y)
+                self.line_to(x + w, y + h)
+                self.line_to(x, y + h)
+                self.line_to(x, y)
+                self.end_path()
+            else:
+                if rx is None and ry is not None:
+                    rx = ry
+                if ry is None and rx is not None:
+                    ry = rx
+                rx = float(rx)
+                ry = float(ry)
+                rx = min(rx, w/2)
+                ry = min(ry, h/2)
+
+                self.new_path()
+                self.set_position(x, y + ry)
+                self.line_to(x, y + h - ry)
+                self.arc_to(rx, ry, 0, 0, 0, x + rx, y + h)
+
+                self.line_to(x + w - rx, y + h)
+                self.arc_to(rx, ry, 0, 0, 0, x + w, y + h - ry)
+
+                self.line_to(x + w, y + ry)
+                self.arc_to(rx, ry, 0, 0, 0, x + w - rx, y)
+
+                self.line_to(x + rx, y)
+                self.arc_to(rx, ry, 0, 0, 0, x, y + ry)
+                self.end_path()
+
+                # self.new_path()
+                # self.set_position(x + rx, y)
+                # self.line_to(x + w - rx, y)
+                # self.arc_to(rx, ry, 0, 0, 0, x + w, y + ry)
+                #
+                # self.line_to(x + w, y + h - ry)
+                # self.arc_to(rx, ry, 0, 0, 0, x + w - rx, y + h)
+                #
+                # self.line_to(x + rx, y + h)
+                # self.arc_to(rx, ry, 0, 0, 0, x, y + h - ry)
+                #
+                # self.line_to(x, y + ry)
+                # self.arc_to(rx, ry, 0, 0, 0, x + rx, y)
+                # self.end_path()
         elif e.tag.endswith('polyline') or e.tag.endswith('polygon'):
             pathdata = e.get('points')
             pathdata = re.findall("(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)", pathdata)

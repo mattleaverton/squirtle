@@ -16,7 +16,7 @@ w.push_handlers(keys)
 gl.glClearColor(1, 1, 1, 1)
 gl.glEnable(gl.GL_LINE_SMOOTH)
 gl.glHint(gl.GL_LINE_SMOOTH_HINT, gl.GL_NICEST)
-gl.glLineWidth(2)
+gl.glLineWidth(1)
 
 squirtle.setup_gl()
 
@@ -36,7 +36,7 @@ def nextFile():
         next %= len(filelist)
     filename = os.path.join('svgs', filelist[next])
     print(f'Parsing {filename}')
-    svgObj = squirtle.SVG(filename)
+    svgObj = squirtle.SVG(filename, circle_points=100)
     svgObj.anchor_x, svgObj.anchor_y = svgObj.width / 2, svgObj.height / 2
 
 
