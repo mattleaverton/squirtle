@@ -19,11 +19,17 @@ def parse_color(c, default=None):
         return default
     if c == 'none':
         return None
-    if c[0] == '#': c = c[1:]
-    if c.startswith('url(#'):
-        return c[5:-1]
+    # Remove whitespace around string
+    c = c.strip()
+    if c[0] == '#':
+        c = c[1:]
     try:
-        if len(c) == 6:
+        if c.startswith('url(#'):
+            return c[5:-1]
+        elif c.startswith('rgb'):
+            c = c[4:-1]
+            r, g, b = [int(x.strip()) for x in c.split(",")]
+        elif len(c) == 6:
             r = int(c[0:2], 16)
             g = int(c[2:4], 16)
             b = int(c[4:6], 16)

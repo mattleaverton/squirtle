@@ -409,6 +409,7 @@ class SVG(object):
             rx = e.get('rx', None)
             ry = e.get('ry', None)
             if rx is None and ry is None:
+                # Default rectangle
                 self.new_path()
                 self.set_position(x, y)
                 self.line_to(x + w, y)
@@ -417,6 +418,8 @@ class SVG(object):
                 self.line_to(x, y)
                 self.end_path()
             else:
+                # Rounded corners
+                # - if one or the other of rx or ry is specified, use that value for both
                 if rx is None and ry is not None:
                     rx = ry
                 if ry is None and rx is not None:
@@ -440,21 +443,6 @@ class SVG(object):
                 self.line_to(x + rx, y)
                 self.arc_to(rx, ry, 0, 0, 0, x, y + ry)
                 self.end_path()
-
-                # self.new_path()
-                # self.set_position(x + rx, y)
-                # self.line_to(x + w - rx, y)
-                # self.arc_to(rx, ry, 0, 0, 0, x + w, y + ry)
-                #
-                # self.line_to(x + w, y + h - ry)
-                # self.arc_to(rx, ry, 0, 0, 0, x + w - rx, y + h)
-                #
-                # self.line_to(x + rx, y + h)
-                # self.arc_to(rx, ry, 0, 0, 0, x, y + h - ry)
-                #
-                # self.line_to(x, y + ry)
-                # self.arc_to(rx, ry, 0, 0, 0, x + rx, y)
-                # self.end_path()
         elif e.tag.endswith('polyline') or e.tag.endswith('polygon'):
             pathdata = e.get('points')
             pathdata = re.findall("(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)", pathdata)
